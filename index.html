@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0" />
+  <title>Arcade Blaster — HTML5 Game</title>
+  <style>
+    :root{
+      --bg:#0b1020;--panel:#101a33;--panel-2:#0e1630;--text:#e8ecff;--muted:#9aa7d9;--accent:#7aa2ff;--accent-2:#66f0ff;--danger:#ff5370;--success:#6df799;--shadow:0 10px 30px rgba(0,0,0,.4);
+    }
+    *{box-sizing:border-box}
+    html,body{height:100%;}
+    body{margin:0;background:radial-gradient(1200px 800px at 50% -100px, #14224d 0%, #0b1020 60%, #060912 100%);color:var(--text);font:500 16px/1.4 system-ui,Segoe UI,Roboto,Helvetica,Arial,sans-serif;overflow:hidden}
+    canvas{position:fixed;inset:0;display:block}
+
+    /* HUD */
+    .hud{position:fixed;top:12px;left:12px;right:12px;display:flex;gap:12px;align-items:center;z-index:2}
+    .chip{background:rgba(16,26,51,.7);backdrop-filter:blur(4px);border:1px solid rgba(122,162,255,.2);padding:8px 12px;border-radius:999px;box-shadow:var(--shadow);display:flex;align-items:center;gap:8px}
+    .chip .bar{width:160px;height:8px;border-radius:999px;background:#1a2a55;overflow:hidden}
+    .chip .bar>i{display:block;height:100%;width:50%;background:linear-gradient(90deg,var(--accent),var(--accent-2));}
+
+    .right{margin-left:auto;display:flex;gap:8px}
+    .btn{cursor:pointer;border:1px solid rgba(122,162,255,.3);background:linear-gradient(180deg,#1b2752,#0f1a3a);color:var(--text);padding:8px 14px;border-radius:12px;box-shadow:var(--shadow);transition:transform .06s ease, filter .2s ease}
+    .btn:hover{filter:brightness(1.08)}
+    .btn:active{transform:translateY(1px)}
+
+    /* Panels */
+    .panel{position:fixed;inset:0;display:grid;place-items:center;background:rgba(4,8,20,.6);backdrop-filter:blur(6px);z-index:5}
+    .card{width:min(720px,92vw);background:linear-gradient(180deg,var(--panel),var(--panel-2));border:1px solid rgba(122,162,255,.25);border-radius:20px;box-shadow:var(--shadow);padding:22px}
+    .card h1{margin:6px 0 6px;font-weight:800;letter-spacing:.5px}
+    .card p{color:var(--muted)}
+    .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+    .grid .box{background:#0b1533;border:1px solid rgba(122,162,255,.15);border-radius:16px;padding:16px}
+
+    .sl{display:flex;align-items:center;gap:10px}
+    .sl input[type=range]{width:100%}
+    .kbd{display:inline-flex;gap:6px;align-items:center}
+    .kbd kbd{border:1px solid rgba(122,162,255,.35);background:#0e1630;border-radius:6px;padding:2px 6px;box-shadow:inset 0 1px 0 rgba(255,255,255,.05)}
+
+    .footer{display:flex;justify-content:space-between;align-items:center;margin-top:14px}
+    .logo{font-weight:900;letter-spacing:.8px;color:var(--accent-2)}
+
+    /* Mobile controls */
+    .touch{position:fixed;inset:0;pointer-events:none}
+    .joy{position:absolute;left:24px;bottom:24px;width:120px;height:120px;border-radius:999px;border:1px solid rgba(122,162,255,.3);background:rgba(16,26,51,.25);backdrop-filter:blur(2px);pointer-events:auto}
+    .joy .knob{position:absolute;left:50%;top:50%;width:60px;height:60px;margin:-30px 0 0 -30px;border-radius:999px;background:rgba(122,162,255,.5)}
+    .fireBtn{position:absolute;right:24px;bottom:24px;width:110px;height:110px;border-radius:999px;border:1px solid rgba(122,162,255,.3);background:rgba(16,26,51,.25);backdrop-filter:blur(2px);pointer-events:auto;display:grid;place-items:center}
+
+    .toast{position:fixed;left:50%;bottom:18px;transform:translateX(-50%);padding:10px 14px;border-radius:12px;background:rgba(10,18,40,.8);border:1px solid rgba(122,162,255,.25);color:var(--text);box-shadow:var(--shadow);z-index:6;opacity:0;transition:opacity .3s ease}
+    .toast.show{opacity:1}
+
+    @media (max-width: 720px){
+      .grid{grid-template-columns:1fr}
+      .chip .bar{width:120px}
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+
+  <!-- HUD -->
+  <div class="hud">
+    <div class="chip" title="Health">
+      ❤ HP
+      <div class="bar"><i id="hpBar"></i></div>
+    </div>
+    <div class="chip" title="Score">🏆 Score: <span id="score">0</span></div>
+    <div class="chip" title="Wave">🌊 Wave: <span id="wave">1</span></div>
+    <div class="right">
+      <button id="pauseBtn" class="btn">⏸ Pause</button>
+      <button id="settingsBtn" class="btn">⚙️ Settings</button>
+      <button id="helpBtn" class="btn">❓ Help</button>
+    </div>
+  </div>
+
+  <!-- Start & Game Over Panel (reused) -->
+  <div id="startPanel" class="panel">
+    <div class="card">
+      <h1>🚀 Arcade Blaster</h1>
+      <p>Keyboard: <span class="kbd"><kbd>W</kbd><kbd>A</kbd><kbd>S</kbd><kbd>D</kbd> / arrows to move</span>, <span class="kbd"><kbd>Space</kbd></span> to fire, <span class="kbd"><kbd>P</kbd></span> to pause.
+      Mobile: use joystick + fire button.</p>
+      <div class="grid">
+        <div class="box">
+          <h3>Game Mode</h3>
+          <div class="sl"><label>Difficulty</label><input id="diff" type="range" min="1" max="3" step="1" value="1"></div>
+          <small class="muted">1 = Chill • 2 = Tough • 3 = Insane</small>
+        </div>
+        <div class="box">
+          <h3>Audio</h3>
+          <div class="sl"><label>SFX Volume</label><input id="vol" type="range" min="0" max="1" step="0.01" value="0.4"></div>
+        </div>
+      </div>
+      <div class="footer">
+        <div>
+          <button id="startBtn" class="btn">▶ Start</button>
+          <button id="resumeBtn" class="btn" style="display:none">▶ Resume</button>
+          <button id="restartBtn" class="btn" style="display:none">↻ Restart</button>
+        </div>
+        <div class="logo">HTML5 • Canvas • JS</div>
+      </div>
+      <div style="margin-top:10px;color:var(--muted)">High Score: <span id="hi">0</span></div>
+    </div>
+  </div>
+
+  <!-- Settings Panel -->
+  <div id="settingsPanel" class="panel" style="display:none">
+    <div class="card">
+      <h1>⚙️ Settings</h1>
+      <div class="grid">
+        <div class="box">
+          <h3>Gameplay</h3>
+          <div class="sl"><label>Difficulty</label><input id="diff2" type="range" min="1" max="3" step="1" value="1"></div>
+          <div class="sl"><label>Particles</label><input id="particlesToggle" type="range" min="0" max="1" step="1" value="1"></div>
+        </div>
+        <div class="box">
+          <h3>Audio</h3>
+          <div class="sl"><label>SFX Volume</label><input id="vol2" type="range" min="0" max="1" step="0.01" value="0.4"></div>
+        </div>
+      </div>
+      <div class="footer">
+        <button id="closeSettings" class="btn">Close</button>
+        <span style="color:var(--muted)">Progress auto-saves locally.</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Help Panel -->
+  <div id="helpPanel" class="panel" style="display:none">
+    <div class="card">
+      <h1>❓ How to Play</h1>
+      <p>Survive waves, collect power-ups, and chase high scores. Enemies scale with your wave and difficulty. 
+      Break energy crystals to gain <b>Shield</b>, <b>Rapid Fire</b>, or <b>Heal</b>.</p>
+      <ul>
+        <li>Move: WASD / Arrow keys / Joystick</li>
+        <li>Fire: Space / Tap FIRE</li>
+        <li>Pause: P or ⏸ button</li>
+      </ul>
+      <div class="footer"><button id="closeHelp" class="btn">Got it</button><span class="muted">Tip: maintain combo for bonus points!</span></div>
+    </div>
+  </div>
+
+  <!-- Touch Controls -->
+  <div class="touch" id="touch">
+    <div class="joy" id="joy"><div class="knob" id="knob"></div></div>
+    <button class="fireBtn btn" id="fireBtn">FIRE</button>
+  </div>
+
+  <div class="toast" id="toast"></div>
+
+  <script>
+  (()=>{
+    const canvas=document.getElementById('game');
+    const ctx=canvas.getContext('2d');
+    const DPR= Math.max(1, Math.min(2, window.devicePixelRatio||1));
+
+    // UI elements
+    const hpBar=document.getElementById('hpBar');
+    const scoreEl=document.getElementById('score');
+    const waveEl=document.getElementById('wave');
+    const hiEl=document.getElementById('hi');
+    const startPanel=document.getElementById('startPanel');
+    const settingsPanel=document.getElementById('settingsPanel');
+    const helpPanel=document.getElementById('helpPanel');
+    const startBtn=document.getElementById('startBtn');
+    const resumeBtn=document.getElementById('resumeBtn');
+    const restartBtn=document.getElementById('restartBtn');
+    const pauseBtn=document.getElementById('pauseBtn');
+    const settingsBtn=document.getElementById('settingsBtn');
+    const helpBtn=document.getElementById('helpBtn');
+    const diff=document.getElementById('diff');
+    const vol=document.getElementById('vol');
+    const diff2=document.getElementById('diff2');
+    const vol2=document.getElementById('vol2');
+    const particlesToggle=document.getElementById('particlesToggle');
+    const closeSettings=document.getElementById('closeSettings');
+    const closeHelp=document.getElementById('closeHelp');
+    const touch=document.getElementById('touch');
+    const joy=document.getElementById('joy');
+    const knob=document.getElementById('knob');
+    const fireBtn=document.getElementById('fireBtn');
+    const toast=document.getElementById('toast');
+
+    // Local storage helpers
+    const store={
+      get(k, d){ try{ const v=localStorage.getItem(k); return v?JSON.parse(v):d }catch{ return d } },
+      set(k, v){ try{ localStorage.setItem(k, JSON.stringify(v)) }catch{} }
+    };
+
+    // Audio: lightweight bleep generator
+    const audioCtx = (typeof AudioContext!=='undefined')? new AudioContext(): null;
+    function sfx(freq=440, type='sine', dur=0.08, vol=0.3){
+      if(!audioCtx) return;
+      const now=audioCtx.currentTime;
+      const o=audioCtx.createOscillator();
+      const g=audioCtx.createGain();
+      o.type=type; o.frequency.value=freq;
+      g.gain.setValueAtTime(0, now);
+      g.gain.linearRampToValueAtTime(Number(vol2.value||vol.value||0.4), now+0.01);
+      g.gain.exponentialRampToValueAtTime(0.0001, now+dur);
+      o.connect(g).connect(audioCtx.destination); o.start(); o.stop(now+dur+0.02);
+    }
+
+    // Resize canvas
+    function resize(){
+      const w=window.innerWidth, h=window.innerHeight;
+      canvas.width=w*DPR; canvas.height=h*DPR; canvas.style.width=w+'px'; canvas.style.height=h+'px';
+      ctx.setTransform(DPR,0,0,DPR,0,0);
+    }
+    window.addEventListener('resize', resize); resize();
+
+    // Game state
+    const state={
+      running:false, paused:false, t:0, dt:0, last:0,
+      score:0, hi: store.get('ab_hi',0), wave:1,
+      difficulty: store.get('ab_diff',1),
+      particles: store.get('ab_particles', true),
+      player:null, bullets:[], enemies:[], crystals:[], effects:[], keys:{},
+    };
+
+    // Sync UI from store
+    hiEl.textContent=state.hi; diff.value=state.difficulty; diff2.value=state.difficulty; particlesToggle.value= state.particles?1:0;
+    vol.value=store.get('ab_vol',0.4); vol2.value=vol.value;
+
+    // Entities
+    function rand(a,b){return Math.random()*(b-a)+a}
+    function clamp(v,a,b){return Math.max(a,Math.min(b,v))}
+
+    class Player{
+      constructor(){
+        this.x=canvas.width/(2*DPR); this.y=canvas.height/(2*DPR); this.r=12;
+        this.speed=220; this.hp=100; t
